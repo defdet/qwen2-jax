@@ -132,9 +132,14 @@ def forward_attention(params: Attention, src_seq: Array, dst_seq: Array, qk_mask
     mesh_out = Mesh(devices.reshape(sharding_tuple_out), name_tuple_out)     
     sharding_out = NamedSharding(mesh_out, P(*name_tuple_out))
 
-    q = op.einsum(src_seq, params.q_proj.weight, 'B S M, M R H K -> B R H S K') + params.q_proj.bias
-    k = op.einsum(dst_seq, params.k_proj.weight, 'B D M, M H K -> B H D K') + params.k_proj.bias
-    v = op.einsum(dst_seq, params.v_proj.weight, 'B D M, M H V -> B H D V') + params.v_proj.bias
+    q = op.einsum(src_seq, params.q_proj.weight, 'B S M, M R H K -> B R H S K')
+    q += params.q_proj.bias.reshape(1, 1, q.shape[2], 1, q.shape[4])
+    
+    k = op.einsum(dst_seq, params.k_proj.weight, 'B D M, M H K -> B H D K')
+    k += params.k_proj.bias.reshape(1, k.shape[1], 1, q.shape[3])
+    
+    v = op.einsum(dst_seq, params.v_proj.weight, 'B D M, M H V -> B H D V')
+    v += params.v_proj.bias.reshape(1, v.shape[1], 1, q.shape[3])
 
     q = jax.lax.with_sharding_constraint(q, sharding_q)
     k = jax.lax.with_sharding_constraint(k, sharding_k)
