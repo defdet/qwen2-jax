@@ -197,7 +197,7 @@ def forward_attention(params: Attention, src_seq: Array, dst_seq: Array, qk_mask
         qkv = qkv.astype(jnp.bfloat16)
     
         qkv = qkv.reshape(qkv.shape[0], model_config.n_rep_kv, qkv.shape[1] // model_config.n_rep_kv, qkv.shape[2], -1)
-        out = op.einsum(qkv, params.out_proj, 'B R H S V, R H V M -> B S M') # Out proj has no bias
+        out = op.einsum(qkv, params.out_proj.weight, 'B R H S V, R H V M -> B S M') # Out proj has no bias
     out = jax.lax.with_sharding_constraint(out, sharding_out)
     
     kv_cache = None if not model_config.return_kv_cache else KVCache(k, v)
