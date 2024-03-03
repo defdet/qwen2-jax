@@ -88,7 +88,7 @@ def forward_attention(params: Attention, src_seq: Array, dst_seq: Array, qk_mask
         block_k_dq=size_num,
         block_q_dq=size_num,
     )
-    attn_impl = 'flash'
+    attn_impl = 'normal'
     devices = mesh_utils.create_device_mesh((jax.device_count(), ))
     device_tuple = (2, jax.device_count() // 2)
 
@@ -149,44 +149,56 @@ def forward_attention(params: Attention, src_seq: Array, dst_seq: Array, qk_mask
     k = forward_rotary_embedding(k, rotary_values=rotary_values)
 
     q_shape = q.shape
+    if attn_impl == 'normal':
+        qk = op.einsum(q, k, 'B R H S K, B H D K -> B R H S D')
+        qk /= math.sqrt(model_config.d_k)
+        qk = jnp.where(qk_mask, qk, -jnp.inf)
+        qk = nn.softmax(qk)  # TODO: use `where`
+        qk = jnp.where(qk_mask, qk, 0)  # TODO: why this line?
 
-    q = q.astype(jnp.float32)
-    k = k.astype(jnp.float32)
-    v = v.astype(jnp.float32)
+        qkv = op.einsum(qk, v, 'B R H S D, B H D V -> B R H S V')
+        out = op.einsum(qkv, params.out_proj, 'B R H S V, R H V M -> B S M')
+    else:
+        
 
-    if kv_cache is not None:
-        assert src_seq.shape[1] == 1
-        assert dst_seq.shape[1] == 1
-        k_cache, v_cache = kv_cache
-        k = k_cache.at[:, :, -1:].set(k)
-        v = v_cache.at[:, :, -1:].set(v)
+        q = q.astype(jnp.float32)
+        k = k.astype(jnp.float32)
+        v = v.astype(jnp.float32)
 
-    # q = q.reshape(q.shape[0], model_config.n_rep_kv * model_config.n_heads_kv, q.shape[3], model_config.d_k)
-    q = q.reshape(q_shape[0], q_shape[1] * q_shape[2], q_shape[3], q_shape[4]) # [B, H, S, K]
-    q_shape = q.shape
+        if kv_cache is not None:
+            assert src_seq.shape[1] == 1
+            assert dst_seq.shape[1] == 1
+            k_cache, v_cache = kv_cache
+            k = k_cache.at[:, :, -1:].set(k)
+            v = v_cache.at[:, :, -1:].set(v)
 
-    qk_mask = qk_mask.squeeze(1)
-    qk_mask = jnp.broadcast_to(qk_mask, (qk_mask.shape[0], q_shape[1], q_shape[2], q_shape[2]))
-
-
-    attention_bias = jax.lax.select(
-            qk_mask == True,
-            jnp.full(qk_mask.shape, 0.0).astype(jnp.bfloat16),
-            jnp.full(qk_mask.shape, -10.0**6).astype(jnp.bfloat16),
-        )
-    specs_tuple = (P(*name_tuple_k),
-                   P(*name_tuple_k),
-                   P(*name_tuple_k),
-                   P(*name_tuple_k))
+        # q = q.reshape(q.shape[0], model_config.n_rep_kv * model_config.n_heads_kv, q.shape[3], model_config.d_k)
+        q = q.reshape(q_shape[0], q_shape[1] * q_shape[2], q_shape[3], q_shape[4]) # [B, H, S, K]
+        q_shape = q.shape
     
-    if attn_impl == 'flash':
-        qkv = shard_map(partial(flash_attention, sm_scale=math.sqrt(model_config.d_k), debug=False, causal=False, block_sizes=block_sizes), mesh=mesh_k, in_specs=specs_tuple, out_specs=P(*name_tuple_k), check_rep=False)(q, k, v, attention_bias)
-    elif attn_impl == 'ring':
-        qkv = shard_map(partial(ring_attention, sm_scale=math.sqrt(model_config.d_k), debug=False, causal=True), mesh=mesh_k, in_specs=specs_tuple, out_specs=P(*name_tuple_k), check_rep=False)(q, k, v, attention_bias)
-    qkv = qkv.astype(jnp.bfloat16)
-
-    qkv = qkv.reshape(qkv.shape[0], model_config.n_rep_kv, qkv.shape[1] // model_config.n_rep_kv, qkv.shape[2], -1)
-    out = op.einsum(qkv, params.out_proj, 'B R H S V, R H V M -> B S M') # Out proj has no bias
+        qk_mask = qk_mask.squeeze(1)
+        qk_mask = jnp.broadcast_to(qk_mask, (qk_mask.shape[0], q_shape[1], q_shape[2], q_shape[2]))
+    
+    
+        attention_bias = jax.lax.select(
+                qk_mask == True,
+                jnp.full(qk_mask.shape, 0.0).astype(jnp.bfloat16),
+                jnp.full(qk_mask.shape, -10.0**6).astype(jnp.bfloat16),
+            )
+        specs_tuple = (P(*name_tuple_k),
+                       P(*name_tuple_k),
+                       P(*name_tuple_k),
+                       P(*name_tuple_k))
+        
+        if attn_impl == 'flash':
+            qkv = shard_map(partial(flash_attention, sm_scale=math.sqrt(model_config.d_k), debug=False, causal=False, block_sizes=block_sizes), mesh=mesh_k, in_specs=specs_tuple, out_specs=P(*name_tuple_k), check_rep=False)(q, k, v, attention_bias)
+        if attn_impl == 'ring':
+            qkv = shard_map(partial(ring_attention, sm_scale=math.sqrt(model_config.d_k), debug=False, causal=True), mesh=mesh_k, in_specs=specs_tuple, out_specs=P(*name_tuple_k), check_rep=False)(q, k, v, attention_bias)
+            
+        qkv = qkv.astype(jnp.bfloat16)
+    
+        qkv = qkv.reshape(qkv.shape[0], model_config.n_rep_kv, qkv.shape[1] // model_config.n_rep_kv, qkv.shape[2], -1)
+        out = op.einsum(qkv, params.out_proj, 'B R H S V, R H V M -> B S M') # Out proj has no bias
     out = jax.lax.with_sharding_constraint(out, sharding_out)
     
     kv_cache = None if not model_config.return_kv_cache else KVCache(k, v)
