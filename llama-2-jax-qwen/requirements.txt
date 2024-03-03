@@ -1,0 +1,25 @@
+# main dependencies
+jax
+jax-smi
+einops
+flax
+optax
+
+# utilities
+fire
+mypy
+wandb
+matplotlib
+tqdm
+types-tqdm
+pdoc3
+
+# testing
+torch
+tf-nightly
+transformers
+
+# param conversion
+accelerate
+sentencepiece
+protobuf~=3.20.0
