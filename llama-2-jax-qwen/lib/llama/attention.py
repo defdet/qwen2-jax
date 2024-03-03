@@ -147,6 +147,12 @@ def forward_attention(params: Attention, src_seq: Array, dst_seq: Array, qk_mask
 
     q = forward_rotary_embedding(q, rotary_values=rotary_values)
     k = forward_rotary_embedding(k, rotary_values=rotary_values)
+    if kv_cache is not None:
+            assert src_seq.shape[1] == 1
+            assert dst_seq.shape[1] == 1
+            k_cache, v_cache = kv_cache
+            k = k_cache.at[:, :, -1:].set(k)
+            v = v_cache.at[:, :, -1:].set(v)
 
     q_shape = q.shape
     if attn_impl == 'normal':
@@ -164,13 +170,6 @@ def forward_attention(params: Attention, src_seq: Array, dst_seq: Array, qk_mask
         q = q.astype(jnp.float32)
         k = k.astype(jnp.float32)
         v = v.astype(jnp.float32)
-
-        if kv_cache is not None:
-            assert src_seq.shape[1] == 1
-            assert dst_seq.shape[1] == 1
-            k_cache, v_cache = kv_cache
-            k = k_cache.at[:, :, -1:].set(k)
-            v = v_cache.at[:, :, -1:].set(v)
 
         # q = q.reshape(q.shape[0], model_config.n_rep_kv * model_config.n_heads_kv, q.shape[3], model_config.d_k)
         q = q.reshape(q_shape[0], q_shape[1] * q_shape[2], q_shape[3], q_shape[4]) # [B, H, S, K]
