@@ -10,7 +10,7 @@ sharding_mp = Llama(
         embedding=...,
         decoder=Decoder(
             input_norm=...,
-            attention=Attention(q_proj=AttentionProj(1, 3), k_proj=AttentionProj(1, 2), v_proj=AttentionProj(1, 2), out_proj=AttentionProj(2, 4)),
+            attention=Attention(q_proj=AttentionProj(weight=(1, 3), bias=...), k_proj=AttentionProj(weight=(1, 2), bias=...), v_proj=AttentionProj(weight=(1, 2), bias=...), out_proj=AttentionProj(weight=(2, 4), bias=...)),
             post_attn_norm=...,
             gate_proj=(1, 2),
             up_proj=(1, 2),
