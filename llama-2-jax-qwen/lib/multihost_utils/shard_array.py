@@ -1,20 +1,11 @@
-from functools import partial
-import math
-from typing import Any, NamedTuple
+from types import EllipsisType
 
 import jax
 from jax import Array
-import jax.random as rand
-
-from ..rand_utils import split_key_nullable
-from .ModelConfig import ModelConfig
-from .attention import Attention, check_attention, forward_attention, init_attention
-from .dropout import forward_dropout
-from .kv_cache import KVCache
-from .rms_norm import check_rms_norm, forward_rms_norm, init_rms_norm
-from .rotary_embedding import RotaryValues
-from jax.experimental import mesh_utils
 from jax.sharding import Mesh, NamedSharding, PartitionSpec as P
+import numpy as np
+from jax.experimental import mesh_utils
+import gc
 
 class DecoderBlock(NamedTuple):
     input_norm: Any  # Array
