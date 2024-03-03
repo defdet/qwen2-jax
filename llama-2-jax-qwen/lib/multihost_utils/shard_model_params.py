@@ -1,7 +1,7 @@
 import jax
 
 from ..llama import Llama, LlamaModel
-from ..llama.attention import Attention
+from ..llama.attention import Attention, AttentionProj
 from ..llama.decoder import Decoder
 from .shard_array import shard_array
 
@@ -10,7 +10,7 @@ sharding_mp = Llama(
         embedding=...,
         decoder=Decoder(
             input_norm=...,
-            attention=Attention(q_proj=(1, 3), k_proj=(1, 2), v_proj=(1, 2), out_proj=(2, 4)),
+            attention=Attention(q_proj=AttentionProj(1, 3), k_proj=AttentionProj(1, 2), v_proj=AttentionProj(1, 2), out_proj=AttentionProj(2, 4)),
             post_attn_norm=...,
             gate_proj=(1, 2),
             up_proj=(1, 2),
