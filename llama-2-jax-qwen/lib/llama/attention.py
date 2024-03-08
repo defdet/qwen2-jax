@@ -176,7 +176,7 @@ def forward_attention(params: Attention, src_seq: Array, dst_seq: Array, qk_mask
         q_shape = q.shape
     
         qk_mask = qk_mask.squeeze(1)
-        qk_mask = jnp.broadcast_to(qk_mask, (qk_mask.shape[0], q_shape[1], q_shape[2], q_shape[2]))
+        qk_mask = jnp.broadcast_to(qk_mask, (qk_mask.shape[0], q_shape[1], q_shape[2], k.shape[2]))
     
     
         attention_bias = jax.lax.select(
