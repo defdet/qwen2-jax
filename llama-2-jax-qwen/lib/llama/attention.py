@@ -157,6 +157,9 @@ def forward_attention(params: Attention, src_seq: Array, dst_seq: Array, qk_mask
             k_cache, v_cache = kv_cache
             k = k_cache.at[:, :, -1:].set(k)
             v = v_cache.at[:, :, -1:].set(v)
+    q = q.astype(jnp.float32)
+    k = k.astype(jnp.float32)
+    v = v.astype(jnp.float32)
 
     q_shape = q.shape
     if attn_impl == 'normal':
