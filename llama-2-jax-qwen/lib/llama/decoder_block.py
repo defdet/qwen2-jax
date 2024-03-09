@@ -53,8 +53,12 @@ def init_decoder_block(*, key: Array, model_config: ModelConfig) -> DecoderBlock
 @partial(jax.jit, static_argnames=('model_config',))
 def forward_decoder_block(params: DecoderBlock, seq: Array, qk_mask: Array, *, rotary_values: RotaryValues, kv_cache: KVCache | None=None, key: Array | None=None, model_config: ModelConfig) -> tuple[Array, KVCache | None]:
     key0, key1, key2 = split_key_nullable(key, num=3)
-    devices = mesh_utils.create_device_mesh((jax.device_count(), ))
-    device_tuple = (2, jax.device_count() // 2)
+    n_devices = jax.device_count()
+    devices = mesh_utils.create_device_mesh((n_devices, ))
+    if n_devices == 32:
+        device_tuple = (4, 8)
+    else:
+        device_tuple = (2, n_devices // 2)
 
     ff_axes = (0, 2)
     seq_axes = (0, 2)
