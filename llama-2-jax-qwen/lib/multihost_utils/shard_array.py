@@ -9,7 +9,12 @@ import gc
 def shard_array(arr: Array, axes: tuple | EllipsisType) -> Array:
     num_axes = 1 if isinstance(axes, EllipsisType) else len(axes)
     if num_axes == 2:
-        device_tuple = (2, jax.device_count() // 2)            
+        n_devices = jax.device_count()
+        devices = mesh_utils.create_device_mesh((n_devices, ))
+        if n_devices == 32:
+            device_tuple = (4, 8)
+        else:
+            device_tuple = (2, n_devices // 2)          
     elif num_axes == 3:
         device_tuple = (2, 2, 4)
     else:
