@@ -157,6 +157,7 @@ def forward_attention(params: Attention, src_seq: Array, dst_seq: Array, qk_mask
             k_cache, v_cache = kv_cache
             k = k_cache.at[:, :, -1:].set(k)
             v = v_cache.at[:, :, -1:].set(v)
+
     q = q.astype(jnp.float32)
     k = k.astype(jnp.float32)
     v = v.astype(jnp.float32)
@@ -170,6 +171,7 @@ def forward_attention(params: Attention, src_seq: Array, dst_seq: Array, qk_mask
         qk = jnp.where(qk_mask, qk, 0)  # TODO: why this line?
 
         qkv = op.einsum(qk, v, 'B R H S D, B H D V -> B R H S V')
+        qkv = qkv.astype(jnp.bfloat16)
         out = op.einsum(qkv, params.out_proj.weight, 'B R H S V, R H V M -> B S M')
     else:
 
