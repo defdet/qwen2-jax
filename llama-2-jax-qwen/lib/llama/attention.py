@@ -88,7 +88,7 @@ def forward_attention(params: Attention, src_seq: Array, dst_seq: Array, qk_mask
         block_k_dq=size_num,
         block_q_dq=size_num,
     )
-    attn_impl = 'flash'
+    attn_impl = 'normal'
     n_devices = jax.device_count()
     devices = mesh_utils.create_device_mesh((n_devices, ))
     if n_devices == 32:
