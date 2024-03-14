@@ -88,7 +88,7 @@ def forward_attention(params: Attention, src_seq: Array, dst_seq: Array, qk_mask
         block_k_dq=size_num,
         block_q_dq=size_num,
     )
-    attn_impl = 'normal'
+    attn_impl = os.getenv('ATTN_IMPL')
     n_devices = jax.device_count()
     devices = mesh_utils.create_device_mesh((n_devices, ))
     if n_devices == 32:
@@ -188,15 +188,22 @@ def forward_attention(params: Attention, src_seq: Array, dst_seq: Array, qk_mask
                 jnp.full(qk_mask.shape, 0.0).astype(jnp.bfloat16),
                 jnp.full(qk_mask.shape, -10.0**6).astype(jnp.bfloat16),
             )
-        specs_tuple = (P(*name_tuple_k),
+        specs_tuple_flash = (P(*name_tuple_k),
                        P(*name_tuple_k),
                        P(*name_tuple_k),
                        P(*name_tuple_k))
+
+        specs_tuple_ring = (P(*name_tuple_k),
+                       P(*name_tuple_k),
+                       P(*name_tuple_k),
+                       P(*name_tuple_k)),
+                       PartitionSpec(("dp", "fsdp"), None)
         
         if attn_impl == 'flash':
-            qkv = shard_map(partial(flash_attention, sm_scale=math.sqrt(model_config.d_k), debug=False, causal=False, block_sizes=block_sizes), mesh=mesh_k, in_specs=specs_tuple, out_specs=P(*name_tuple_k), check_rep=False)(q, k, v, attention_bias)
+            qkv = shard_map(partial(flash_attention, sm_scale=math.sqrt(model_config.d_k), debug=False, causal=False, block_sizes=block_sizes), mesh=mesh_k, in_specs=specs_tuple_flash, out_specs=P(*name_tuple_k), check_rep=False)(q, k, v, attention_bias)
         if attn_impl == 'ring':
-            qkv = shard_map(partial(ring_attention, sm_scale=math.sqrt(model_config.d_k), debug=False, causal=True), mesh=mesh_k, in_specs=specs_tuple, out_specs=P(*name_tuple_k), check_rep=False)(q, k, v, attention_bias)
+            segment_ids = jnp.zeros((q_shape[0], q_shape[2]), dtype="i4")
+            qkv = shard_map(partial(ring_attention, sm_scale=math.sqrt(model_config.d_k), debug=False, causal=True), mesh=mesh_k, in_specs=specs_tuple_ring, out_specs=P(*name_tuple_k), check_rep=False)(q, k, v, attention_bias)
             
         qkv = qkv.astype(jnp.bfloat16)
     
